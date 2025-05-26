@@ -18,13 +18,71 @@ class VideoSummarizationPipeline:
     def __init__(self, config: VideoSummarizationPipelineConfig):
         self.config = config
         self.logger = self._setup_logger()
+        
+        # 记录实验信息
+        if self.config.exam_name:
+            self.logger.info(f"Initializing experiment: {self.config.exam_name}")
+            self.logger.info(f"Experiment directory: {self.config.base_output_dir}")
+        
+        # 创建实验信息文件
+        self._create_experiment_info_file()
     
     def _setup_logger(self):
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s'
-        )
-        return logging.getLogger(__name__)
+        """设置日志记录器，将日志同时输出到控制台和实验目录的日志文件"""
+        # 创建日志格式
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        
+        # 创建根logger
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        # 清除可能存在的处理器
+        logger.handlers.clear()
+        
+        # 控制台处理器
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+        
+        # 如果有实验目录，添加文件处理器
+        if self.config.base_output_dir:
+            log_file = Path(self.config.base_output_dir) / f"{self.config.exam_name}_pipeline.log"
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            
+        return logger
+    
+    def _create_experiment_info_file(self):
+        """在实验目录中创建实验信息文件"""
+        if not self.config.base_output_dir or not self.config.exam_name:
+            return
+            
+        import json
+        from datetime import datetime
+        
+        experiment_info = {
+            "experiment_name": self.config.exam_name,
+            "created_at": datetime.now().isoformat(),
+            "configuration": {
+                "dataset_name": self.config.dataset_name,
+                "base_data_dir": self.config.base_data_dir,
+                "base_output_dir": self.config.base_output_dir,
+                "extractor_model": self.config.extractor_config.model_name,
+                "captioner_model": self.config.captioner_config.model_name,
+                "llm_handler_model": self.config.llm_handler_config.pretrained,
+                "eval_method": self.config.evaluator_config.eval_method
+            }
+        }
+        
+        info_file = Path(self.config.base_output_dir) / f"{self.config.exam_name}_experiment_info.json"
+        
+        try:
+            with open(info_file, 'w', encoding='utf-8') as f:
+                json.dump(experiment_info, f, indent=2, ensure_ascii=False)
+            self.logger.info(f"Created experiment info file: {info_file}")
+        except Exception as e:
+            self.logger.warning(f"Failed to create experiment info file: {e}")
     
     def _create_output_directories(self):
         """创建必要的输出目录"""
@@ -197,6 +255,9 @@ class VideoSummarizationPipeline:
         """主入口点：运行完整的视频摘要生成流程"""
         self.logger.info("Starting Video Summarization Pipeline...")
         
+        if self.config.exam_name:
+            self.logger.info(f"Running experiment: {self.config.exam_name}")
+        
         try:
             # 创建输出目录
             self._create_output_directories()
@@ -211,15 +272,48 @@ class VideoSummarizationPipeline:
             self.calc_semantic_similarity()
             results = self.eval_final_score()
             
+            # 保存最终结果到实验目录
+            self._save_final_results(results)
+            
             self.logger.info("Video Summarization Pipeline completed successfully!")
+            if self.config.exam_name:
+                self.logger.info(f"Experiment '{self.config.exam_name}' completed successfully!")
+                self.logger.info(f"All results saved to: {self.config.base_output_dir}")
+            
             return results
             
         except Exception as e:
             self.logger.error(f"Pipeline failed: {str(e)}")
+            if self.config.exam_name:
+                self.logger.error(f"Experiment '{self.config.exam_name}' failed!")
             raise
         finally:
             # 最终清理
             gc.collect()
+    
+    def _save_final_results(self, results):
+        """保存最终结果到实验目录"""
+        if not self.config.base_output_dir or not self.config.exam_name:
+            return
+            
+        import json
+        from datetime import datetime
+        
+        final_results = {
+            "experiment_name": self.config.exam_name,
+            "completed_at": datetime.now().isoformat(),
+            "results": results,
+            "status": "completed"
+        }
+        
+        results_file = Path(self.config.base_output_dir) / f"{self.config.exam_name}_final_results.json"
+        
+        try:
+            with open(results_file, 'w', encoding='utf-8') as f:
+                json.dump(final_results, f, indent=2, ensure_ascii=False)
+            self.logger.info(f"Saved final results to: {results_file}")
+        except Exception as e:
+            self.logger.warning(f"Failed to save final results: {e}")
 
 
 # 示例使用

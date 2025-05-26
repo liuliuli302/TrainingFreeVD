@@ -155,6 +155,7 @@ class VideoSummarizationPipelineConfig:
                  base_data_dir: str = None,
                  base_output_dir: str = None,
                  dataset_name: str = "TVSum",
+                 exam_name: str = None,  # 新增实验名称参数
                  
                  # 各组件特定配置
                  extractor_config: ExtractorConfig = None,
@@ -168,6 +169,7 @@ class VideoSummarizationPipelineConfig:
         self.base_data_dir = base_data_dir
         self.base_output_dir = base_output_dir
         self.dataset_name = dataset_name
+        self.exam_name = exam_name  # 保存实验名称
         
         # 初始化各组件配置，如果没有提供则使用默认配置
         self.extractor_config = extractor_config or ExtractorConfig()
