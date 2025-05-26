@@ -3,7 +3,6 @@ import torch
 import warnings
 import numpy as np
 from typing import List, Optional, Tuple, TYPE_CHECKING
-from util.constant import VIDEO_EXTENSIONS, DEFAULT_PROMPT_TEMPLATES
 
 if TYPE_CHECKING:
     from config.config import CaptionerConfig

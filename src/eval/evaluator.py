@@ -4,7 +4,6 @@ import h5py
 from pathlib import Path
 from typing import Dict, List, Tuple, Union, TYPE_CHECKING
 import os
-from util.constant import EVAL_METHODS, HDF5_FILE_NAMES, SIMILARITY_SCORE_TYPES, DEFAULT_SUMMARY_RATIO
 
 if TYPE_CHECKING:
     from config.config import EvaluatorConfig

@@ -1,14 +1,8 @@
 """
 视频摘要Pipeline各组件配置类 
 """
-from util.constant import (
-    CLIP_TYPES, VIDEO_EXTENSIONS, SCORE_PATTERN, DEFAULT_PROMPT_TEMPLATES,
-    DEFAULT_DATASET_PROMPT, DEFAULT_FIRST_PROMPT, DEFAULT_SECOND_PROMPT,
-    DATASET_FILE_NAMES, HDF5_FILE_NAMES, EVAL_METHODS, SIMILARITY_SCORE_TYPES,
-    LLM_TYPES, ALPHA_RANGE, DEFAULT_FRAME_INTERVAL, DEFAULT_MAX_FRAMES,
-    DEFAULT_CONV_TEMPLATE, DEFAULT_STRIDE, DEFAULT_BATCH_SIZE, IMAGE_EXTENSIONS,
-    DEFAULT_SUMMARY_RATIO, PATH_SUFFIXES, DATASET_MAPPING, EPSILON
-)
+import numpy as np
+
 
 class ExtractorConfig:
     def __init__(self, 
@@ -17,13 +11,8 @@ class ExtractorConfig:
                  videos_dir: str = None,
                  frames_dir: str = None,
                  annotations_file: str = None,
-                 stride: int = DEFAULT_STRIDE,
-                 batch_size: int = DEFAULT_BATCH_SIZE,
-                 video_folder: str = None,
-                 output_folder: str = None,
-                 text_folder: str = None,
-                 visual_features_dir: str = None,
-                 text_features_dir: str = None):
+                 stride: int = 15,
+                 batch_size: int = 128):
         self.model_name = model_name
         self.device = device
         self.videos_dir = videos_dir
@@ -31,14 +20,9 @@ class ExtractorConfig:
         self.annotations_file = annotations_file
         self.stride = stride
         self.batch_size = batch_size
-        self.video_folder = video_folder
-        self.output_folder = output_folder
-        self.text_folder = text_folder
-        self.visual_features_dir = visual_features_dir
-        self.text_features_dir = text_features_dir
         # 常量配置
-        self.video_extensions = VIDEO_EXTENSIONS
-        self.image_extensions = IMAGE_EXTENSIONS
+        self.video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv')
+        self.image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff')
 
 
 class DatasetBuilderConfig:
@@ -50,18 +34,21 @@ class DatasetBuilderConfig:
         self.save_dir = save_dir
         self.clip_length = clip_length
         # 常量配置
-        self.clip_types = CLIP_TYPES
-        self.dataset_prompt = DEFAULT_DATASET_PROMPT
-        self.dataset_file_names = DATASET_FILE_NAMES
-        self.hdf5_file_names = HDF5_FILE_NAMES
-        self.path_suffixes = PATH_SUFFIXES
+        self.clip_types = {"turn": "00", "jump": "01"}
+        self.dataset_prompt = (
+            "You are a professional short film editor and director. "
+            "Please score the frames divided based on theirs representativeness, "
+            "diversity, and interest on a scale from 0 to 1. You may need to refer "
+            "to the context for rating. And give the final score list like `[scores]`.\n "
+            "without any extra text. You must output score."
+        )
 
 
 class CaptionerConfig:
     def __init__(self,
                  model_name: str = "lmms-lab/LLaVA-Video-7B-Qwen2",
-                 max_frames: int = DEFAULT_MAX_FRAMES,
-                 conv_template: str = DEFAULT_CONV_TEMPLATE,
+                 max_frames: int = 64,
+                 conv_template: str = "qwen_1_5",
                  video_folder: str = None,
                  output_folder: str = None,
                  prompt_templates: list = None):
@@ -70,9 +57,9 @@ class CaptionerConfig:
         self.conv_template = conv_template
         self.video_folder = video_folder
         self.output_folder = output_folder
-        self.prompt_templates = prompt_templates or DEFAULT_PROMPT_TEMPLATES.copy()
-        # 常量配置
-        self.video_extensions = VIDEO_EXTENSIONS
+        self.prompt_templates = prompt_templates or [
+            "Summarize the main content and main events of the video in a concise and clear manner according to the order of events."
+        ]
 
 
 class LLMHandlerConfig:
@@ -96,19 +83,35 @@ class LLMQueryConfig:
                  dataset_dir: str = None,
                  result_dir: str = None,
                  scores_dir: str = None,
-                 frame_interval: int = DEFAULT_FRAME_INTERVAL,
+                 frame_interval: int = 15,
                  first_prompt: str = None,
                  second_prompt: str = None):
         self.dataset_dir = dataset_dir
         self.result_dir = result_dir
         self.scores_dir = scores_dir
         self.frame_interval = frame_interval
-        self.first_prompt = first_prompt or DEFAULT_FIRST_PROMPT
-        self.second_prompt = second_prompt or DEFAULT_SECOND_PROMPT
+        self.first_prompt = first_prompt or (
+            "You are a professional short film editor and director. "
+            "Please score the frames divided based on theirs representativeness, "
+            "diversity, and interest on a scale from 0 to 1. You may need to refer "
+            "to the context for rating. And give the final score list like `[scores]`.\n "
+            "without any extra text. You must output score."
+        )
+        self.second_prompt = second_prompt or (
+            "Please provide a detailed analysis of each frame and give final scores."
+        )
         # 常量配置
-        self.score_pattern = SCORE_PATTERN
-        self.dataset_file_names = DATASET_FILE_NAMES
-        self.hdf5_file_names = HDF5_FILE_NAMES
+        self.score_pattern = r"Score:\s*(\d+\.\d+)"
+        self.dataset_file_names = [
+            "summe_dataset_jump.json",
+            "summe_dataset_turn.json", 
+            "tvsum_dataset_jump.json",
+            "tvsum_dataset_turn.json"
+        ]
+        self.hdf5_file_names = {
+            "summe": "summe.h5",
+            "tvsum": "tvsum.h5"
+        }
 
 
 class EvaluatorConfig:
@@ -124,13 +127,12 @@ class EvaluatorConfig:
         self.output_dir = output_dir
         self.eval_method = eval_method
         # 常量配置
-        self.eval_methods = EVAL_METHODS
-        self.similarity_score_types = SIMILARITY_SCORE_TYPES
-        self.llm_types = LLM_TYPES
-        self.alpha_range = ALPHA_RANGE
-        self.summary_ratio = DEFAULT_SUMMARY_RATIO
-        self.dataset_mapping = DATASET_MAPPING
-        self.hdf5_file_names = HDF5_FILE_NAMES
+        self.eval_methods = {
+            "summe": "max",
+            "tvsum": "avg"
+        }
+        self.alpha_range = [round(x, 1) for x in np.arange(0.1, 1.1, 0.1)]
+        self.summary_ratio = 0.15
 
 
 class UtilConfig:
@@ -139,14 +141,12 @@ class UtilConfig:
                  text_features_dir: str = None,
                  similarity_scores_dir: str = None,
                  segment_num: int = 5,
-                 epsilon: float = EPSILON):
+                 epsilon: float = 1e-8):
         self.visual_features_dir = visual_features_dir
         self.text_features_dir = text_features_dir
         self.similarity_scores_dir = similarity_scores_dir
         self.segment_num = segment_num
         self.epsilon = epsilon
-        # Constants from constants.py
-        self.similarity_score_types = SIMILARITY_SCORE_TYPES
 
 
 class VideoSummarizationPipelineConfig:
@@ -170,6 +170,33 @@ class VideoSummarizationPipelineConfig:
         self.base_output_dir = base_output_dir
         self.dataset_name = dataset_name
         self.exam_name = exam_name  # 保存实验名称
+        
+        # 全局常量配置 - 减少重复定义
+        self.constants = {
+            "dataset_file_names": [
+                "summe_dataset_jump.json",
+                "summe_dataset_turn.json", 
+                "tvsum_dataset_jump.json",
+                "tvsum_dataset_turn.json"
+            ],
+            "hdf5_file_names": {
+                "summe": "summe.h5",
+                "tvsum": "tvsum.h5"
+            },
+            "similarity_score_types": [
+                "max_p_max_m", 
+                "max_p_mean_m", 
+                "mean_p_max_m", 
+                "mean_p_mean_m"
+            ],
+            "llm_types": ["jump", "turn"],
+            "dataset_mapping": {
+                "summe": "SumMe",
+                "tvsum": "TVSum"
+            },
+            "video_extensions": ('.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'),
+            "image_extensions": ('.jpg', '.jpeg', '.png', '.bmp', '.tiff')
+        }
         
         # 初始化各组件配置，如果没有提供则使用默认配置
         self.extractor_config = extractor_config or ExtractorConfig()

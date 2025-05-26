@@ -4,7 +4,6 @@ import torch
 from tqdm import tqdm
 from pathlib import Path
 from typing import TYPE_CHECKING
-from util.constant import EPSILON
 
 if TYPE_CHECKING:
     from config.config import UtilConfig
@@ -17,7 +16,7 @@ def split_segments(data, num_segments, axis=0):
     return torch.tensor_split(data, list(indices), axis)
 
 
-def compute_similarity_scores(visual_feat, text_feat, segment_num, epsilon=EPSILON):
+def compute_similarity_scores(visual_feat, text_feat, segment_num, epsilon):
     visual_segs = split_segments(visual_feat, segment_num, axis=0)
     text_segs = split_segments(text_feat, segment_num, axis=0)
 

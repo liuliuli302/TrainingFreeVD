@@ -7,11 +7,10 @@ import os
 import re
 from tqdm import tqdm
 from typing import Dict, List, Any, TYPE_CHECKING
-from util.constant import SCORE_PATTERN, DATASET_FILE_NAMES, HDF5_FILE_NAMES
 
 if TYPE_CHECKING:
     from config.config import LLMQueryConfig
-from llm_handler import LLMHandler
+from .llm_handler import LLMHandler
 import h5py
 
 

@@ -6,7 +6,6 @@ import h5py
 import numpy as np
 from decord import VideoReader, cpu
 from torch.utils.data import Dataset, DataLoader
-from util.constant import CLIP_TYPES
 
 if TYPE_CHECKING:
     from config.config import DatasetBuilderConfig
