@@ -7,14 +7,13 @@ import numpy as np
 from decord import VideoReader, cpu
 from torch.utils.data import Dataset, DataLoader
 
-if TYPE_CHECKING:
-    from config.config import DatasetBuilderConfig
+from src.config.config import DatasetBuilderConfig
 
 
 class DatasetBuilder:
     """优雅的数据集构建器，支持SumMe和TVSum数据集的处理"""
     
-    def __init__(self, config: 'DatasetBuilderConfig'):
+    def __init__(self, config: DatasetBuilderConfig):
         self.config = config
         self.data_dir = Path(config.data_dir)
         self.save_dir = Path(config.save_dir)

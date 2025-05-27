@@ -8,8 +8,7 @@ import re
 from tqdm import tqdm
 from typing import Dict, List, Any, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from config.config import LLMQueryConfig
+from src.config.config import LLMQueryConfig
 from .llm_handler import LLMHandler
 import h5py
 
@@ -17,7 +16,7 @@ import h5py
 class LLMQuery:
     """Query LLM for video summarization scores"""
     
-    def __init__(self, config: 'LLMQueryConfig', llm_handler: LLMHandler):
+    def __init__(self, config: LLMQueryConfig, llm_handler: LLMHandler):
         self.config = config
         self.llm_handler = llm_handler
         # 使用配置中的常量

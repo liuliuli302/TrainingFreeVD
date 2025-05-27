@@ -5,8 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union, TYPE_CHECKING
 import os
 
-if TYPE_CHECKING:
-    from config.config import EvaluatorConfig
+from src.config.config import EvaluatorConfig
 
 
 class VideoSummaryEvaluator:

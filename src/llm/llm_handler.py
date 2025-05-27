@@ -4,8 +4,7 @@ from pathlib import Path
 from PIL import Image
 from typing import List, Union, Optional, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from config.config import LLMHandlerConfig
+from src.config.config import LLMHandlerConfig
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -30,7 +29,7 @@ except ImportError:
 class LLMHandler:
     """Handler for LLM interactions, supporting both local models and API calls"""
     
-    def __init__(self, config: 'LLMHandlerConfig'):
+    def __init__(self, config: LLMHandlerConfig):
         """
         Initialize LLM handler
         

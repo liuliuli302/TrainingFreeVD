@@ -11,12 +11,11 @@ from decord import VideoReader, cpu
 from tqdm import tqdm
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from config.config import ExtractorConfig
+from src.config.config import ExtractorConfig
 
 
 class Extractor:
-    def __init__(self, config: 'ExtractorConfig'):
+    def __init__(self, config: ExtractorConfig):
         """
         初始化提取器
         

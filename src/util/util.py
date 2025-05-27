@@ -5,8 +5,7 @@ from tqdm import tqdm
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from config.config import UtilConfig
+from src.config.config import UtilConfig
 
 
 def split_segments(data, num_segments, axis=0):
@@ -58,7 +57,7 @@ def compute_similarity_scores(visual_feat, text_feat, segment_num, epsilon):
     return score_dict
 
 
-def process_all(config: 'UtilConfig'):
+def process_all(config: UtilConfig):
     """
     Process all videos with similarity scores computation
     

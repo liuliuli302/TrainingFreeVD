@@ -4,14 +4,14 @@
 import gc
 import logging
 from pathlib import Path
-from config.config import VideoSummarizationPipelineConfig
-from llm.extractor import Extractor
-from dataset.dataset_builder import DatasetBuilder
-from llm.captioner import VideoCaptioner
-from llm.llm_handler import LLMHandler
-from llm.llm_query import LLMQuery
-from eval.evaluator import VideoSummaryEvaluator
-from util.util import process_all
+from src.config.config import VideoSummarizationPipelineConfig
+from src.llm.extractor import Extractor
+from src.dataset.dataset_builder import DatasetBuilder
+from src.llm.captioner import VideoCaptioner
+from src.llm.llm_handler import LLMHandler
+from src.llm.llm_query import LLMQuery
+from src.eval.evaluator import VideoSummaryEvaluator
+from src.util.util import process_all
 
 
 class VideoSummarizationPipeline:
