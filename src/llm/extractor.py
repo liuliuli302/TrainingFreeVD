@@ -1,7 +1,6 @@
 import argparse
 import os
 from pathlib import Path
-import cv2
 import torch
 import numpy as np
 import math
@@ -12,6 +11,7 @@ from tqdm import tqdm
 from typing import TYPE_CHECKING
 
 from src.config.config import ExtractorConfig
+from src.llm.frame_extractor import FrameExtractor
 
 
 class Extractor:
@@ -25,19 +25,33 @@ class Extractor:
         self.config = config
         self.device = config.device if config.device else ("cuda" if torch.cuda.is_available() else "cpu")
         
-        # 加载BLIP-2模型和处理器
-        self.processor = Blip2Processor.from_pretrained(config.model_name)
-        self.model = Blip2Model.from_pretrained(
-            config.model_name, torch_dtype=torch.float32)
-        self.model.to(self.device)
+        # 延迟加载模型和处理器
+        self.processor = None
+        self.model = None
+        self._model_loaded = False
         
-    def extract_frames(self, video_path=None, frames_dir=None):
+        # 初始化独立的帧提取器
+        self.frame_extractor = FrameExtractor()
+    
+    def _load_model(self):
+        """延迟加载BLIP-2模型和处理器"""
+        if not self._model_loaded:
+            print(f"Loading BLIP-2 model: {self.config.model_name}")
+            self.processor = Blip2Processor.from_pretrained(self.config.model_name)
+            self.model = Blip2Model.from_pretrained(
+                self.config.model_name, torch_dtype=torch.float16)
+            self.model.to(self.device)
+            self._model_loaded = True
+            print("BLIP-2 model loaded successfully!")
+        
+    def extract_frames(self, video_path=None, frames_dir=None, skip_if_exists=True):
         """
-        从视频中提取帧
+        从视频中提取帧（使用独立的帧提取器）
         
         Args:
             video_path: 视频文件路径（可选，默认使用config中的参数）
             frames_dir: 帧保存目录（可选，默认使用config中的参数）
+            skip_if_exists: 如果帧已存在是否跳过提取，默认为True
             
         Returns:
             tuple: (视频名称, 帧数量)
@@ -45,120 +59,135 @@ class Extractor:
         video_path = video_path or self.config.videos_dir
         frames_dir = frames_dir or self.config.frames_dir
         
-        video_name = Path(video_path).stem
-        video_frames_dir = os.path.join(frames_dir, video_name)
-        os.makedirs(video_frames_dir, exist_ok=True)
-        
-        cap = cv2.VideoCapture(video_path)
-        frame_count = 0
-        
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_path = os.path.join(video_frames_dir, f"{frame_count:06d}.jpg")
-            cv2.imwrite(frame_path, frame)
-            frame_count += 1
-            
-        cap.release()
-        print(f"Extracted {frame_count} frames from {video_path} to {video_frames_dir}")
-        return video_name, frame_count
+        return self.frame_extractor.extract_frames(video_path, frames_dir, skip_if_exists)
 
-    def extract_frames_from_directory(self, videos_dir=None, frames_dir=None, annotations_file=None):
+    def extract_frames_from_directory(self, videos_dir=None, frames_dir=None, annotations_file=None, skip_if_exists=True):
         """
-        批量从视频目录提取帧
+        批量从视频目录提取帧（使用独立的帧提取器）
         
         Args:
             videos_dir: 视频目录（可选，默认使用config中的参数）
             frames_dir: 帧保存目录（可选，默认使用config中的参数）
             annotations_file: 标注文件路径（可选，默认使用config中的参数）
+            skip_if_exists: 如果帧已存在是否跳过提取，默认为True
         """
         videos_dir = videos_dir or self.config.videos_dir
         frames_dir = frames_dir or self.config.frames_dir
         annotations_file = annotations_file or self.config.annotations_file
         
-        os.makedirs(frames_dir, exist_ok=True)
-        os.makedirs(os.path.dirname(annotations_file), exist_ok=True)
-        
-        with open(annotations_file, "w") as f:
-            for video_file in os.listdir(videos_dir):
-                if video_file.endswith((".avi", ".mp4")):
-                    video_path = os.path.join(videos_dir, video_file)
-                    video_name, num_frames = self.extract_frames(video_path, frames_dir)
-                    f.write(f"{video_name} 0 {num_frames - 1} 0\n")
+        self.frame_extractor.extract_frames_from_directory(videos_dir, frames_dir, annotations_file, skip_if_exists)
 
     @torch.no_grad()
-    def extract_visual_features(self, video_folder=None, output_folder=None, stride=None, batch_size=None):
+    def extract_visual_features(self, video_folder=None, frames_root_dir=None, output_folder=None, stride=None, batch_size=None):
         """
         提取视频的视觉特征
         
         Args:
-            video_folder: 视频文件夹路径（可选，默认使用config中的参数）
+            video_folder: 视频文件夹路径（可选，默认使用config中的参数, 用于确定要处理哪些视频）
+            frames_root_dir: 提取的帧文件存放的根目录 (可选, 默认使用config.frames_dir)
             output_folder: 特征保存文件夹（可选，默认使用config中的参数）
             stride: 帧采样步长（可选，默认使用config中的参数）
             batch_size: 批处理大小（可选，默认使用config中的参数）
         """
-        video_folder = video_folder or self.config.video_folder or self.config.videos_dir
-        output_folder = output_folder or self.config.visual_features_dir or self.config.output_folder
+        # 只有在需要时才加载模型
+        self._load_model()
+        
+        video_folder = Path(video_folder or self.config.video_folder or self.config.videos_dir)
+        frames_root_dir = Path(frames_root_dir or self.config.frames_dir)
+        output_folder = Path(output_folder or self.config.visual_features_dir or self.config.output_folder)
         stride = stride or self.config.stride
         batch_size = batch_size or self.config.batch_size
         
-        video_folder = Path(video_folder)
-        output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
 
-        # 获取视频文件列表
-        video_files = [f for f in video_folder.iterdir() 
-                      if f.suffix in ['.mp4', '.avi', '.mov']]
+        video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm']
+        video_files = [f for f in video_folder.iterdir() if f.suffix.lower() in video_extensions]
 
-        for video_file in tqdm(video_files, desc="Processing videos", unit="video"):
-            vr = VideoReader(str(video_file), ctx=cpu(0))
-            frame_count = len(vr)
+        for video_file in tqdm(video_files, desc="Processing videos for visual features", unit="video"):
+            video_stem = video_file.stem
+            feature_file = output_folder / f'{video_stem}.npy'
+            
+            if feature_file.exists():
+                tqdm.write(f"Visual features for {video_file.name} already exist. Skipping.")
+                continue
 
-            # 生成按照stride采样的帧索引
-            indices = list(range(0, frame_count, stride))
-            frames = vr.get_batch(indices).asnumpy()
+            current_video_frames_dir = frames_root_dir / video_stem
+            if not current_video_frames_dir.exists():
+                tqdm.write(f"Frame directory {current_video_frames_dir} not found for {video_file.name}. Skipping.")
+                continue
+
+            frame_files = sorted([f for f in current_video_frames_dir.iterdir() if f.suffix.lower() == '.jpg'])
+            
+            if not frame_files:
+                tqdm.write(f"No frames found in {current_video_frames_dir} for {video_file.name}. Skipping.")
+                continue
+            
+            frames_to_process = frame_files[::stride]
+
+            if not frames_to_process:
+                tqdm.write(f"No frames to process for {video_file.name} after applying stride. Skipping.")
+                continue
 
             all_features = []
-            num_batches = math.ceil(len(frames) / batch_size)
+            num_batches = math.ceil(len(frames_to_process) / batch_size)
 
-            for batch_idx in tqdm(range(num_batches), 
-                                desc=f"Processing batches in {video_file.name}", 
-                                unit="batch", leave=False):
-                start_idx = batch_idx * batch_size
-                end_idx = min(start_idx + batch_size, len(frames))
-                batch_frames = frames[start_idx:end_idx]
+            try:
+                for batch_idx in tqdm(range(num_batches), 
+                                    desc=f"Processing batches in {video_file.name}", 
+                                    unit="batch", leave=False):
+                    start_idx = batch_idx * batch_size
+                    end_idx = min(start_idx + batch_size, len(frames_to_process))
+                    batch_frame_files = frames_to_process[start_idx:end_idx]
 
-                batch_images = [Image.fromarray(frame) for frame in batch_frames]
-                inputs = self.processor(images=batch_images, return_tensors="pt").to(
-                    self.device, torch.float32)
+                    if not batch_frame_files:
+                        continue
 
-                # 手动执行 vision -> qformer -> language projection
-                vision_outputs = self.model.vision_model(pixel_values=inputs.pixel_values)
-                image_embeds = vision_outputs[0]
+                    batch_images = []
+                    for frame_path in batch_frame_files:
+                        try:
+                            img = Image.open(frame_path).convert("RGB")
+                            batch_images.append(img)
+                        except Exception as e:
+                            tqdm.write(f"Error loading frame {frame_path} for {video_file.name}: {e}. Skipping frame.")
+                    
+                    if not batch_images:
+                        tqdm.write(f"No images loaded for batch {batch_idx} in {video_file.name}. Skipping batch.")
+                        continue
+                    
+                    # Process images and move pixel_values to device
+                    processed_inputs = self.processor(images=batch_images, return_tensors="pt")
+                    pixel_values = processed_inputs.pixel_values.to(self.device, torch.float16)
 
-                image_attention_mask = torch.ones(
-                    image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
-                query_tokens = self.model.query_tokens.expand(image_embeds.shape[0], -1, -1)
+                    # 手动执行 vision -> qformer -> language projection
+                    vision_outputs = self.model.vision_model(pixel_values=pixel_values)
+                    image_embeds = vision_outputs[0]
 
-                qformer_outputs = self.model.qformer(
-                    query_embeds=query_tokens,
-                    encoder_hidden_states=image_embeds,
-                    encoder_attention_mask=image_attention_mask,
-                    return_dict=True
-                )
-                query_output = qformer_outputs.last_hidden_state
-                projected_features = self.model.language_projection(query_output)
+                    image_attention_mask = torch.ones(
+                        image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+                    query_tokens = self.model.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
-                if projected_features.dtype != image_embeds.dtype:
-                    projected_features = projected_features.to(image_embeds.dtype)
+                    qformer_outputs = self.model.qformer(
+                        query_embeds=query_tokens,
+                        encoder_hidden_states=image_embeds,
+                        encoder_attention_mask=image_attention_mask,
+                        return_dict=True
+                    )
+                    query_output = qformer_outputs.last_hidden_state
+                    projected_features = self.model.language_projection(query_output)
 
-                batch_features = projected_features.cpu().numpy()
-                all_features.append(batch_features)
+                    if projected_features.dtype != image_embeds.dtype:
+                        projected_features = projected_features.to(image_embeds.dtype)
 
-            final_features = np.concatenate(all_features, axis=0)
-            feature_file = output_folder / f'{video_file.stem}.npy'
-            np.save(feature_file, final_features)
+                    batch_features = projected_features.cpu().numpy()
+                    all_features.append(batch_features)
+
+                final_features = np.concatenate(all_features, axis=0)
+                np.save(feature_file, final_features)
+            except Exception as e:
+                tqdm.write(f"Error processing video {video_file.name} for visual features: {type(e).__name__} - {e}. Skipping.")
+                if hasattr(e, 'input_meta'):
+                    tqdm.write(f"Meta tensor info (if available): {e.input_meta}")
+                continue
 
     @torch.no_grad()
     def extract_text_features(self, text_folder=None, output_folder=None):
@@ -169,6 +198,9 @@ class Extractor:
             text_folder: 文本文件夹路径（可选，默认使用config中的参数）
             output_folder: 特征保存文件夹（可选，默认使用config中的参数）
         """
+        # 只有在需要时才加载模型
+        self._load_model()
+        
         text_folder = text_folder or self.config.text_folder
         output_folder = output_folder or self.config.text_features_dir or self.config.output_folder
         
@@ -179,6 +211,11 @@ class Extractor:
         text_files = [f for f in text_folder.iterdir() if f.suffix == ".txt"]
 
         for text_file in tqdm(text_files, desc="Processing text files", unit="file"):
+            feature_file = output_folder / f"{text_file.stem}_text.npy"
+            if feature_file.exists():
+                tqdm.write(f"Text features for {text_file.name} already exist. Skipping.")
+                continue
+
             with open(text_file, 'r', encoding='utf-8') as f:
                 text = f.read().strip()
 
@@ -191,7 +228,6 @@ class Extractor:
             text_features = inputs_embeds.squeeze(0).cpu().numpy()
 
             # 保存
-            feature_file = output_folder / f"{text_file.stem}_text.npy"
             np.save(feature_file, text_features)
 
     def extract_single_video_features(self, video_path, stride=1, batch_size=16):
@@ -206,6 +242,9 @@ class Extractor:
         Returns:
             numpy.ndarray: 视频特征数组
         """
+        # 只有在需要时才加载模型
+        self._load_model()
+        
         vr = VideoReader(str(video_path), ctx=cpu(0))
         frame_count = len(vr)
         
@@ -222,7 +261,7 @@ class Extractor:
             
             batch_images = [Image.fromarray(frame) for frame in batch_frames]
             inputs = self.processor(images=batch_images, return_tensors="pt").to(
-                self.device, torch.float32)
+                self.device, torch.float16)
             
             vision_outputs = self.model.vision_model(pixel_values=inputs.pixel_values)
             image_embeds = vision_outputs[0]
@@ -258,6 +297,9 @@ class Extractor:
         Returns:
             numpy.ndarray: 文本特征数组
         """
+        # 只有在需要时才加载模型
+        self._load_model()
+        
         inputs = self.processor(text=[text], return_tensors="pt").to(self.device)
         input_ids = inputs["input_ids"]
         
@@ -294,7 +336,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-    extractor = Extractor()
+    
+    # 为命令行模式创建临时配置
+    from src.config.config import ExtractorConfig
+    config = ExtractorConfig()
+    
+    extractor = Extractor(config)
     
     if args.mode == 'frames':
         if not args.annotations_file:

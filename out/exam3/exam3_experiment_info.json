@@ -1,8 +1,11 @@
 {
   "experiment_name": "exam3",
-  "created_at": "2025-05-27T14:09:33.829265",
+  "created_at": "2025-05-28T02:26:38.554187",
   "configuration": {
-    "dataset_name": "TVSum",
+    "dataset_names": [
+      "TVSum",
+      "SumMe"
+    ],
     "base_data_dir": "/root/autodl-tmp/data",
     "base_output_dir": "/root/TrainingFreeVD/out/exam3",
     "extractor_model": "Salesforce/blip2-opt-2.7b",

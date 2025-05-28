@@ -101,7 +101,7 @@ def main():
     config = VideoSummarizationPipelineConfig(
         base_data_dir="/root/autodl-tmp/data",  # 修改为你的数据目录
         base_output_dir=exam_dir,  # 使用实验目录作为输出目录
-        dataset_name="TVSum",  # 可选: TVSum 或 SumMe
+        dataset_names=["TVSum", "SumMe"],  # 修改为处理两个数据集
         exam_name=exam_name  # 添加实验名称到配置
     )
 
@@ -109,7 +109,7 @@ def main():
     print(f"实验目录: {exam_dir}")
     print(f"数据目录: {config.base_data_dir}")
     print(f"输出目录: {config.base_output_dir}")
-    print(f"数据集: {config.dataset_name}")
+    print(f"数据集: {config.dataset_names}")
     print("-" * 60)
 
     try:

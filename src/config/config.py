@@ -2,6 +2,7 @@
 视频摘要Pipeline各组件配置类 
 """
 import numpy as np
+from typing import List
 
 
 class ExtractorConfig:
@@ -67,6 +68,10 @@ class CaptionerConfig:
         self.prompt_templates = prompt_templates or [
             "Summarize the main content and main events of the video in a concise and clear manner according to the order of events."
         ]
+        # 添加视频扩展名常量
+        self.video_extensions = (
+            '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v'
+        )
 
 
 class LLMHandlerConfig:
@@ -94,6 +99,7 @@ class LLMQueryConfig:
         result_dir: str = None,
         scores_dir: str = None,
         frame_interval: int = 15,
+        # 保留向后兼容性，但不再使用
         first_prompt: str = None,
         second_prompt: str = None
     ):
@@ -101,6 +107,8 @@ class LLMQueryConfig:
         self.result_dir = result_dir
         self.scores_dir = scores_dir
         self.frame_interval = frame_interval
+        
+        # 为了向后兼容保留，但LLMQuery类现在使用内置的多个prompts
         self.first_prompt = first_prompt or (
             "You are a professional short film editor and director. "
             "Please score the frames divided based on theirs representativeness, "
@@ -111,8 +119,9 @@ class LLMQueryConfig:
         self.second_prompt = second_prompt or (
             "Please provide a detailed analysis of each frame and give final scores."
         )
-        # 常量配置
-        self.score_pattern = r"Score:\s*(\d+\.\d+)"
+        
+        # 更新的分数模式以匹配新的输出格式
+        self.score_pattern = r'\[([\d\.\,\s]+)\]'  # 匹配 [0.1, 0.2, 0.3, ...]
         self.dataset_file_names = [
             "summe_dataset_jump.json",
             "summe_dataset_turn.json",
@@ -146,6 +155,12 @@ class EvaluatorConfig:
         }
         self.alpha_range = [round(x, 1) for x in np.arange(0.1, 1.1, 0.1)]
         self.summary_ratio = 0.15
+        # HDF5文件名配置
+        self.hdf5_file_names = {
+            "summe": "summe.h5",
+            "tvsum": "tvsum.h5"
+        }
+        self.summary_ratio = 0.15
 
 
 class UtilConfig:
@@ -170,7 +185,7 @@ class VideoSummarizationPipelineConfig:
         # 基础路径配置
         base_data_dir: str = None,
         base_output_dir: str = None,
-        dataset_name: str = "TVSum",
+        dataset_names: List[str] = None,  # 修改为列表，允许处理多个数据集
         exam_name: str = None,  # 新增实验名称参数
 
         # 各组件特定配置
@@ -185,7 +200,7 @@ class VideoSummarizationPipelineConfig:
 
         self.base_data_dir = base_data_dir
         self.base_output_dir = base_output_dir
-        self.dataset_name = dataset_name
+        self.dataset_names = dataset_names if dataset_names else ["TVSum", "SumMe"] # 设置默认值
         self.exam_name = exam_name  # 保存实验名称
 
         # 全局常量配置 - 减少重复定义
@@ -230,31 +245,25 @@ class VideoSummarizationPipelineConfig:
     def _setup_paths(self):
         """根据基础配置自动设置各个组件的路径"""
         if self.base_data_dir and self.base_output_dir:
-            # Extractor配置路径
-            self.extractor_config.videos_dir = f"{self.base_data_dir}/{self.dataset_name}/videos"
-            self.extractor_config.frames_dir = f"{self.base_data_dir}/{self.dataset_name}/frames"
-            self.extractor_config.annotations_file = f"{self.base_data_dir}/{self.dataset_name}/annotations/test.txt"
-
-            # DatasetBuilder配置路径
+            # DatasetBuilder配置路径 - 处理多个数据集
             self.dataset_builder_config.data_dir = self.base_data_dir
             self.dataset_builder_config.save_dir = f"{self.base_output_dir}/dataset"
 
-            # Captioner配置路径
-            self.captioner_config.video_folder = f"{self.base_data_dir}/{self.dataset_name}/videos"
-            self.captioner_config.output_folder = f"{self.base_data_dir}/{self.dataset_name}/captions"
-
-            # LLMQuery配置路径
+            # LLMQuery配置路径 - 公共路径
             self.llm_query_config.dataset_dir = f"{self.base_output_dir}/dataset"
             self.llm_query_config.result_dir = f"{self.base_output_dir}/dataset/result/raw"
             self.llm_query_config.scores_dir = f"{self.base_output_dir}/dataset/result/scores"
 
-            # Evaluator配置路径
+            # Evaluator配置路径 - 处理多个数据集
             self.evaluator_config.dataset_dir = self.base_data_dir
             self.evaluator_config.llm_score_file = f"{self.base_output_dir}/dataset/result/scores/raw_llm_out_scores.json"
             self.evaluator_config.similarity_scores_dir = f"{self.base_output_dir}/dataset/result/similarity_scores"
             self.evaluator_config.output_dir = f"{self.base_output_dir}/dataset/result/f1score"
 
-            # Util配置路径
-            self.util_config.visual_features_dir = f"{self.base_data_dir}/{self.dataset_name}/features/visual"
-            self.util_config.text_features_dir = f"{self.base_data_dir}/{self.dataset_name}/features/text"
+            # Util配置路径 - 会在运行时动态设置
             self.util_config.similarity_scores_dir = f"{self.base_output_dir}/dataset/result/similarity_scores"
+            
+            # 注意：以下路径会在pipeline运行时针对每个数据集动态设置：
+            # - extractor_config.videos_dir, frames_dir, annotations_file
+            # - captioner_config.video_folder, output_folder  
+            # - util_config.visual_features_dir, text_features_dir

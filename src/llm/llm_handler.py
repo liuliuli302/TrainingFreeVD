@@ -1,5 +1,8 @@
 import torch
 import copy
+import sys
+import os
+from contextlib import contextmanager
 from pathlib import Path
 from PIL import Image
 from typing import List, Union, Optional, TYPE_CHECKING
@@ -7,6 +10,9 @@ from typing import List, Union, Optional, TYPE_CHECKING
 from src.config.config import LLMHandlerConfig
 import warnings
 warnings.filterwarnings("ignore")
+# Suppress specific transformers warnings
+warnings.filterwarnings("ignore", message=".*attention_mask.*")
+warnings.filterwarnings("ignore", message=".*pad token.*")
 
 # For local model
 try:

@@ -197,14 +197,21 @@ class VideoCaptioner:
             txt_name = os.path.splitext(video_name)[0] + '.txt'
             txt_path = os.path.join(output_folder, txt_name)
             
+            # 检查字幕文件是否已存在
+            if os.path.exists(txt_path):
+                tqdm.write(f"字幕文件已存在，跳过: {txt_path}")
+                continue
+            
             try:
                 captions = self.caption_video(video_path, prompt_templates)
                 with open(txt_path, 'w', encoding='utf-8') as f:
                     for caption in captions:
                         f.write(caption + '\n')
-                print(f"✓ Processed: {video_name}")
+                # 移除打印语句以避免干扰tqdm进度条
+                # print(f"✓ Processed: {video_name}")
             except Exception as e:
-                print(f"✗ Error processing {video_name}: {str(e)}")
+                # 使用tqdm.write()来输出错误信息，避免干扰进度条
+                tqdm.write(f"✗ Error processing {video_name}: {str(e)}")
     
     def set_prompts(self, prompts: List[str]):
         """Set custom prompt templates"""

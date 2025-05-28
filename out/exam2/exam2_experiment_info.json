@@ -1,9 +1,12 @@
 {
   "experiment_name": "exam2",
-  "created_at": "2025-05-26T20:54:00.633724",
+  "created_at": "2025-05-28T02:22:47.902196",
   "configuration": {
-    "dataset_name": "TVSum",
-    "base_data_dir": "/path/to/your/data",
+    "dataset_names": [
+      "TVSum",
+      "SumMe"
+    ],
+    "base_data_dir": "/root/autodl-tmp/data",
     "base_output_dir": "/root/TrainingFreeVD/out/exam2",
     "extractor_model": "Salesforce/blip2-opt-2.7b",
     "captioner_model": "lmms-lab/LLaVA-Video-7B-Qwen2",

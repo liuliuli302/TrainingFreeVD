@@ -2,7 +2,7 @@ import json
 import numpy as np
 import h5py
 from pathlib import Path
-from typing import Dict, List, Tuple, Union, TYPE_CHECKING
+from typing import Dict, List, Tuple, Union, TYPE_CHECKING, Any
 import os
 
 from src.config.config import EvaluatorConfig
@@ -175,7 +175,16 @@ class VideoSummaryEvaluator:
         
         for key in result_list.keys():
             fscore_list = []
-            result_scores = result_list[key]
+            
+            # 检查是否为新的多prompt格式
+            result_data = result_list[key]
+            if isinstance(result_data, dict) and "main_scores" in result_data:
+                # 新格式：使用main_scores作为主要分数
+                result_scores = result_data["main_scores"]
+            else:
+                # 旧格式：直接使用分数
+                result_scores = result_data
+            
             dataset_name = key.split("_")[0]
             
             for video_name in result_scores.keys():
@@ -225,6 +234,70 @@ class VideoSummaryEvaluator:
             fscore_result[key] = avg_fscore
         
         return fscore_result
+    
+    def evaluate_prompt_results(self, score_file: str = None) -> Dict[str, Dict[str, float]]:
+        """
+        Evaluate results for each individual prompt
+        
+        Args:
+            score_file: Path to score file
+            
+        Returns:
+            Dict with structure {dataset_split: {prompt_name: avg_fscore}}
+        """
+        score_file = score_file or self.config.llm_score_file
+        
+        with open(score_file) as f:
+            result_list = json.load(f)
+        
+        prompt_results = {}
+        
+        for key in result_list.keys():
+            result_data = result_list[key]
+            
+            # 只处理新格式的多prompt结果
+            if isinstance(result_data, dict) and "prompt_scores" in result_data:
+                dataset_name = key.split("_")[0]
+                prompt_results[key] = {}
+                
+                for prompt_name, prompt_scores in result_data["prompt_scores"].items():
+                    fscore_list = []
+                    
+                    for video_name in prompt_scores.keys():
+                        pred_scores = prompt_scores[video_name]
+                        f1score, _ = self.get_fscore_from_predscore(
+                            pred_scores, video_name, dataset_name
+                        )
+                        fscore_list.append(f1score)
+                    
+                    if fscore_list:
+                        fscore_list = np.array(fscore_list)
+                        avg_fscore = fscore_list.mean()
+                        prompt_results[key][prompt_name] = avg_fscore
+        
+        return prompt_results
+    
+    def evaluate_comprehensive(self, score_file: str = None) -> Dict[str, Any]:
+        """
+        Comprehensive evaluation including main scores and per-prompt analysis
+        
+        Args:
+            score_file: Path to score file
+            
+        Returns:
+            Dict with main results and prompt-specific results
+        """
+        main_results = self.evaluate_from_file(score_file)
+        prompt_results = self.evaluate_prompt_results(score_file)
+        
+        return {
+            "main_results": main_results,
+            "prompt_results": prompt_results,
+            "summary": {
+                "overall_avg": np.mean(list(main_results.values())) if main_results else 0.0,
+                "prompt_comparison": prompt_results
+            }
+        }
 
 
 # Example usage
